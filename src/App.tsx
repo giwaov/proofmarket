@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ethers } from "ethers";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useSignMessage, useSwitchChain } from "wagmi";
@@ -10,7 +10,6 @@ import {
   Bot,
   Check,
   ChevronRight,
-  CircleDollarSign,
   Clock3,
   Database,
   Fingerprint,
@@ -24,16 +23,40 @@ import {
   ShieldCheck,
   Sparkles,
   TerminalSquare,
-  Trophy,
   X
 } from "lucide-react";
-import { agents, challengeCode } from "./data";
-import type { TrialResult, TrialStatus } from "./types";
+import { challengeCode } from "./data";
+import type {
+  RegistryCredential,
+  RegistryData,
+  TrialResult,
+  TrialStatus
+} from "./types";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const shortHash = (value?: string) =>
   value ? `${value.slice(0, 10)}…${value.slice(-8)}` : "pending";
+
+const shortAddress = (value: string) => `${value.slice(0, 6)}…${value.slice(-4)}`;
+
+const formatDate = (timestamp?: number) =>
+  timestamp
+    ? new Intl.DateTimeFormat("en", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }).format(new Date(timestamp * 1000))
+    : "—";
+
+const gradeForScore = (score: number) => {
+  if (score >= 95) return "A+";
+  if (score >= 90) return "A";
+  if (score >= 85) return "B+";
+  if (score >= 70) return "B";
+  if (score >= 50) return "C";
+  return "D";
+};
 
 function App() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -44,10 +67,45 @@ function App() {
   const [challengeStarted, setChallengeStarted] = useState(false);
   const [agentResponse, setAgentResponse] = useState("");
   const [error, setError] = useState("");
+  const [registry, setRegistry] = useState<RegistryData | null>(null);
+  const [registryError, setRegistryError] = useState("");
+  const [walletCredential, setWalletCredential] = useState<RegistryCredential | null>(null);
   const { address, chainId, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const { switchChainAsync } = useSwitchChain();
   const wallet = address ? ethers.getAddress(address) : "";
+
+  async function refreshRegistry() {
+    try {
+      const response = await fetch("/api/registry");
+      if (!response.ok) throw new Error("Registry unavailable");
+      setRegistry((await response.json()) as RegistryData);
+      setRegistryError("");
+    } catch {
+      setRegistryError("Live registry data is temporarily unavailable.");
+    }
+  }
+
+  useEffect(() => {
+    void refreshRegistry();
+  }, []);
+
+  useEffect(() => {
+    if (!wallet) {
+      setWalletCredential(null);
+      return;
+    }
+
+    void fetch(`/api/credentials/${wallet}`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Credential lookup failed");
+        return response.json();
+      })
+      .then((payload: { credential: RegistryCredential | null }) =>
+        setWalletCredential(payload.credential)
+      )
+      .catch(() => setWalletCredential(null));
+  }, [wallet]);
 
   const progress = useMemo(
     () =>
@@ -137,6 +195,18 @@ function App() {
       }
       const payload = (await response.json()) as TrialResult;
       setResult(payload);
+      setWalletCredential({
+        trialId: payload.trialId,
+        agent: payload.agentWallet,
+        capability: "solidity-security-audit",
+        score: payload.score,
+        evidenceRoot: payload.evidenceRoot,
+        expiresAt: payload.expiresAt ?? 0,
+        transactionHash: payload.chainTxHash,
+        active: true,
+        revoked: false
+      });
+      void refreshRegistry();
       setLogs((current) => [
         ...current,
         "Evidence anchored to 0G Storage",
@@ -151,6 +221,19 @@ function App() {
   }
 
   const isActive = status !== "idle" && status !== "complete";
+  const activeCredential: RegistryCredential | null = result
+    ? {
+        trialId: result.trialId,
+        agent: result.agentWallet,
+        capability: "solidity-security-audit",
+        score: result.score,
+        evidenceRoot: result.evidenceRoot,
+        expiresAt: result.expiresAt ?? 0,
+        transactionHash: result.chainTxHash,
+        active: true,
+        revoked: false
+      }
+    : walletCredential;
 
   return (
     <div className="app-shell">
@@ -226,64 +309,74 @@ function App() {
             <a href="#protocol" className="text-cta">Explore the protocol <ChevronRight size={17} /></a>
           </div>
           <div className="trust-row">
-            <div><strong>1</strong><span>live adversarial benchmark</span></div>
-            <div><strong>3</strong><span>0G proof layers</span></div>
-            <div><strong>90d</strong><span>credential validity</span></div>
-            <div><strong>16661</strong><span>0G Mainnet chain</span></div>
+            <div><strong>{registry?.stats.credentialsIssued ?? "—"}</strong><span>credentials issued</span></div>
+            <div><strong>{registry?.stats.uniqueAgents ?? "—"}</strong><span>unique agent wallets</span></div>
+            <div><strong>{registry?.stats.passed ?? "—"}</strong><span>scores at or above 85</span></div>
+            <div><strong>{registry?.stats.latestBlock ?? "—"}</strong><span>latest credential block</span></div>
           </div>
         </section>
 
         <section className="market-section" id="market">
           <div className="section-heading">
             <div>
-              <span className="section-kicker">CAPABILITY PASSPORT DESIGN</span>
-              <h2>Proof profiles, not paid rankings.</h2>
+              <span className="section-kicker">LIVE 0G REGISTRY</span>
+              <h2>Credentials issued on mainnet.</h2>
             </div>
-            <button className="ghost-button">View all agents <ArrowRight size={16} /></button>
+            <a
+              className="ghost-button"
+              href="https://chainscan.0g.ai/address/0xdEd45520Ea0f3740d6e5f76363d245342d290287"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open registry <ArrowRight size={16} />
+            </a>
           </div>
           <div className="agent-grid">
-            {agents.map((agent, index) => (
-              <article className={`agent-card ${index === 0 ? "featured" : ""}`} key={agent.name}>
-                {index === 0 && <span className="featured-tag"><Trophy size={12} /> EXAMPLE PASSPORT</span>}
+            {registry?.recentCredentials.map((credential, index) => (
+              <article className={`agent-card ${index === 0 ? "featured" : ""}`} key={credential.trialId}>
                 <div className="agent-top">
-                  <div className="agent-avatar" style={{ "--accent": agent.accent } as React.CSSProperties}>
-                    {agent.glyph}
+                  <div className="agent-avatar" style={{ "--accent": "#d7ff45" } as React.CSSProperties}>
+                    {credential.agent.slice(2, 4).toUpperCase()}
                     <span />
                   </div>
                   <div className="agent-score">
                     <small>PROOF SCORE</small>
-                    <strong>{agent.score}<span>/100</span></strong>
+                    <strong>{credential.score}<span>/100</span></strong>
                   </div>
                 </div>
                 <div className="agent-title">
-                  <h3>{agent.name} <BadgeCheck size={17} /></h3>
-                  <code>{agent.handle}</code>
+                  <h3>Agent wallet <BadgeCheck size={17} /></h3>
+                  <code>{shortAddress(credential.agent)}</code>
                 </div>
-                <p>{agent.specialty}</p>
+                <p>Solidity security audit credential</p>
                 <div className="agent-stats">
-                  <span><strong>{agent.trials}</strong> trials</span>
-                  <span><strong>{agent.streak}</strong> win streak</span>
-                  <span><strong>{agent.rate}</strong></span>
+                  <span><strong>Block {credential.blockNumber}</strong></span>
+                  <span><strong>Expires {formatDate(credential.expiresAt)}</strong></span>
                 </div>
-                <button onClick={() => document.getElementById("arena")?.scrollIntoView({ behavior: "smooth" })}>
-                  Preview passport <ArrowRight size={15} />
-                </button>
+                <a href={`https://chainscan.0g.ai/tx/${credential.transactionHash}`} target="_blank" rel="noreferrer">
+                  View transaction <ArrowRight size={15} />
+                </a>
               </article>
             ))}
+            {!registry && !registryError && <div className="registry-empty">Loading 0G Mainnet credentials…</div>}
+            {registryError && <div className="registry-empty">{registryError}</div>}
+            {registry && registry.recentCredentials.length === 0 && (
+              <div className="registry-empty">No credentials have been issued by this registry yet.</div>
+            )}
           </div>
         </section>
 
         <section className="arena-section" id="arena">
           <div className="arena-intro">
-            <span className="section-kicker">LIVE TRIAL #PM-4821</span>
+            <span className="section-kicker">BENCHMARK · SOLIDITY-VAULT-01</span>
             <h2>The claim is easy.<br /><em>The trial is not.</em></h2>
             <p>
               Connect the wallet that owns your agent, reveal the benchmark, run the audit using
               your own agent, and submit its unedited response to an independent 0G jury.
             </p>
             <div className="trial-specs">
-              <div><LockKeyhole size={17} /><span><small>CHALLENGE</small>Sealed until execution</span></div>
-              <div><Clock3 size={17} /><span><small>TIME LIMIT</small>90 seconds</span></div>
+              <div><LockKeyhole size={17} /><span><small>CHALLENGE</small>Content hash verified</span></div>
+              <div><Clock3 size={17} /><span><small>CREDENTIAL</small>Valid for 90 days</span></div>
               <div><Gauge size={17} /><span><small>PASS MARK</small>85 / 100</span></div>
             </div>
           </div>
@@ -305,9 +398,9 @@ function App() {
                   <Radar size={64} strokeWidth={1.15} />
                   <i /><i /><i />
                 </div>
-                <span className="ready-label">UNSEEN BENCHMARK LOADED</span>
+                <span className="ready-label">PRODUCTION BENCHMARK READY</span>
                 <h3>YieldVault Adversarial Audit</h3>
-                <p>3 planted issues · 2 exploitable · 1 deliberate decoy</p>
+                <p>Challenge commitment verified against the production benchmark.</p>
                 <button className="run-button" onClick={runTrial}>
                   <TerminalSquare size={18} /> {wallet ? "Begin signed trial" : "Connect wallet to begin"}
                 </button>
@@ -372,10 +465,10 @@ function App() {
                       </div>
                       <div>
                         <span className="pass-badge">
-                          <ShieldCheck size={15} /> {result.passed ? "PASSED" : "SCORED"} · {result.mode === "live" ? "0G MAINNET" : "PREVIEW"}
+                          <ShieldCheck size={15} /> {result.passed ? "PASSED" : "SCORED"} · 0G MAINNET
                         </span>
                         <h3>{result.passed ? "Expert capability verified" : "Capability scored below threshold"}</h3>
-                        <p>Top {100 - result.percentile}% of all audited agents</p>
+                        <p>Evaluated by {result.model} through 0G Compute</p>
                       </div>
                     </div>
                     <div className="findings-list">
@@ -424,58 +517,57 @@ function App() {
           </div>
 
           <div className="passport-layout">
-            <div className="passport-card">
+            {activeCredential ? <div className="passport-card">
               <div className="passport-noise" />
               <div className="passport-topline">
                 <div className="brand mini"><span className="brand-mark"><Fingerprint size={17} /></span> PROOFMARKET</div>
-                <span>
-                  {!result
-                    ? "SAMPLE PASSPORT"
-                    : result.mode === "live"
-                      ? "LIVE MAINNET CREDENTIAL"
-                      : "DEMO CREDENTIAL"}{" "}
-                  · 004821
-                </span>
+                <span>LIVE MAINNET CREDENTIAL · {shortHash(activeCredential.trialId)}</span>
               </div>
               <div className="passport-identity">
-                <div className="passport-avatar">S9<span /></div>
+                <div className="passport-avatar">{activeCredential.agent.slice(2, 4).toUpperCase()}<span /></div>
                 <div>
-                  <small>VERIFIED AUTONOMOUS AGENT</small>
-                  <h3>{wallet ? "YOUR AGENT" : "SENTINEL-9"} <BadgeCheck size={20} /></h3>
-                  <code>{wallet ? `did:0g:agent:${wallet.toLowerCase()}` : "connect wallet to issue"}</code>
+                  <small>{activeCredential.active ? "ACTIVE MAINNET CREDENTIAL" : "INACTIVE CREDENTIAL"}</small>
+                  <h3>Agent wallet <BadgeCheck size={20} /></h3>
+                  <code>{activeCredential.agent}</code>
                 </div>
-                <div className="passport-grade"><span>GRADE</span><strong>A+</strong></div>
+                <div className="passport-grade"><span>GRADE</span><strong>{gradeForScore(activeCredential.score)}</strong></div>
               </div>
               <div className="capability-row">
                 <div><small>CAPABILITY</small><strong>Solidity Security Audit</strong></div>
-                <div><small>PROOF SCORE</small><strong>{result?.score ?? "—"} <span>/ 100</span></strong></div>
-                <div><small>VALID UNTIL</small><strong>18 SEP 2026</strong></div>
+                <div><small>PROOF SCORE</small><strong>{activeCredential.score} <span>/ 100</span></strong></div>
+                <div><small>VALID UNTIL</small><strong>{formatDate(activeCredential.expiresAt)}</strong></div>
               </div>
-              <div className="skill-bars">
+              {result && <div className="skill-bars">
                 {[
-                  ["Vulnerability accuracy", result?.rubric.accuracy ?? 0],
-                  ["Exploit reasoning", result?.rubric.exploitability ?? 0],
-                  ["Remediation quality", result?.rubric.remediation ?? 0],
-                  ["Hallucination restraint", result?.rubric.restraint ?? 0]
+                  ["Vulnerability accuracy", result.rubric.accuracy],
+                  ["Exploit reasoning", result.rubric.exploitability],
+                  ["Remediation quality", result.rubric.remediation],
+                  ["Hallucination restraint", result.rubric.restraint]
                 ].map(([label, value]) => (
                   <div key={label as string}>
                     <span>{label}</span><i><b style={{ width: `${value}%` }} /></i><strong>{value}</strong>
                   </div>
                 ))}
-              </div>
+              </div>}
               <div className="passport-footer">
-                <span><Fingerprint size={15} /> EVIDENCE <code>{shortHash(result?.evidenceRoot ?? "0x827a845c2f0c977a8caee9fb47f681d13452a4c74b9b51b5616fd302cc8a12be")}</code></span>
+                <span><Fingerprint size={15} /> EVIDENCE <code>{shortHash(activeCredential.evidenceRoot)}</code></span>
                 <span className="passport-verified">
                   <ShieldCheck size={16} />{" "}
-                  {result?.mode === "live" ? "VERIFIED ON 0G MAINNET" : "MAINNET-READY PREVIEW"}
+                  {activeCredential.revoked ? "REVOKED" : "VERIFIED ON 0G MAINNET"}
                 </span>
               </div>
-            </div>
+            </div> : (
+              <div className="passport-card passport-empty">
+                <Fingerprint size={42} />
+                <h3>No credential loaded</h3>
+                <p>Connect a wallet with an issued credential or complete a live trial to generate this passport.</p>
+              </div>
+            )}
 
             <div className="proof-stack">
               <div className="proof-card">
                 <span className="proof-icon compute"><Bot /></span>
-                <div><small>INDEPENDENT EVALUATION</small><h3>0G Compute</h3><p>TEE-backed jury scored the agent against a sealed rubric.</p></div>
+                <div><small>INDEPENDENT EVALUATION</small><h3>0G Compute</h3><p>The production model jury scored the signed agent response against the rubric.</p></div>
                 <BadgeCheck className="proof-check" />
               </div>
               <div className="proof-card">
@@ -497,8 +589,8 @@ function App() {
             <span className="section-kicker">HOW PROOF BECOMES MARKET SIGNAL</span>
             <h2>One protocol.<br />Four honest moments.</h2>
             <p>
-              Challenges are committed before agents see them. Execution is isolated. Evaluation is
-              independent. Evidence is permanent. Anyone can verify the result without trusting us.
+              The benchmark content hash is fixed, the owner signs the exact response, evaluation is
+              independent, and the resulting evidence root and credential are recorded on 0G.
             </p>
             <a href="https://docs.0g.ai/" target="_blank" rel="noreferrer" className="text-cta">
               Read the architecture <ArrowRight size={17} />
@@ -507,7 +599,7 @@ function App() {
           <div className="protocol-flow">
             {[
               [Fingerprint, "01", "CLAIM", "Agent declares a capability and stakes its reputation."],
-              [LockKeyhole, "02", "CHALLENGE", "A sealed, unseen benchmark is committed onchain."],
+              [LockKeyhole, "02", "CHALLENGE", "The benchmark source and content hash are verified."],
               [Activity, "03", "PROVE", "The owner signs and submits the agent's unedited output."],
               [ShieldCheck, "04", "ISSUE", "0G jury scores evidence and issues the passport."]
             ].map(([Icon, no, title, body], index) => {
@@ -533,7 +625,6 @@ function App() {
             <button className="primary-cta" onClick={() => document.getElementById("arena")?.scrollIntoView({ behavior: "smooth" })}>
               Verify your agent <ArrowRight size={18} />
             </button>
-            <button className="outline-cta"><CircleDollarSign size={18} /> Post a paid challenge</button>
           </div>
         </section>
       </main>

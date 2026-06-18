@@ -25,5 +25,37 @@ export type TrialResult = {
   storageTxHash?: string;
   chainTxHash?: string;
   agentWallet: string;
+  expiresAt?: number;
   mode: "live" | "demo";
+};
+
+export type RegistryCredential = {
+  trialId: string;
+  agent: string;
+  capabilityId?: string;
+  capability?: string;
+  score: number;
+  evidenceRoot: string;
+  expiresAt: number;
+  issuedAt?: number;
+  transactionHash?: string;
+  blockNumber?: number;
+  revoked?: boolean;
+  active?: boolean;
+};
+
+export type RegistryData = {
+  network: string;
+  chainId: number;
+  contract: string;
+  deploymentBlock: number;
+  capability: string;
+  passMark: number;
+  stats: {
+    credentialsIssued: number;
+    uniqueAgents: number;
+    passed: number;
+    latestBlock: number;
+  };
+  recentCredentials: RegistryCredential[];
 };

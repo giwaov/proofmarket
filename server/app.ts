@@ -11,7 +11,14 @@ const MAINNET_RPC = "https://evmrpc.0g.ai";
 const MAINNET_STORAGE_INDEXER = "https://indexer-storage-turbo.0g.ai";
 const MAINNET_COMPUTE_ROUTER = "https://router-api.0g.ai/v1";
 const MAINNET_REGISTRY = "0xdEd45520Ea0f3740d6e5f76363d245342d290287";
+const REGISTRY_DEPLOYMENT_BLOCK = 36453629;
+const CAPABILITY_ID = ethers.id(benchmark.capability);
+const LEGACY_PLACEHOLDER_AGENT = "0x71B400000000000000000000000000000000A09E";
 const DEMO_MODE_ALLOWED = process.env.ALLOW_DEMO_MODE === "true";
+const registryInterface = new ethers.Interface([
+  "event CredentialIssued(bytes32 indexed trialId,address indexed agent,bytes32 indexed capabilityId,uint16 score,bytes32 evidenceRoot,uint64 expiresAt)",
+  "function getCredential(address agent,bytes32 capabilityId) view returns ((uint16 score,uint64 issuedAt,uint64 expiresAt,bytes32 evidenceRoot,bytes32 challengeCommitment,bytes32 evaluatorModelHash,bytes32 trialId,bool revoked))"
+]);
 
 app.use(express.json({ limit: "1mb" }));
 
@@ -267,6 +274,38 @@ async function issueOnchainCredential(input: {
   return receipt?.hash as string | undefined;
 }
 
+async function readCredentialEvents() {
+  const provider = new ethers.JsonRpcProvider(process.env.ZG_RPC_URL ?? MAINNET_RPC);
+  const logs = await provider.getLogs({
+    address: process.env.PROOFMARKET_CONTRACT_ADDRESS ?? MAINNET_REGISTRY,
+    fromBlock: REGISTRY_DEPLOYMENT_BLOCK,
+    toBlock: "latest",
+    topics: [registryInterface.getEvent("CredentialIssued")!.topicHash]
+  });
+
+  return logs
+    .map((log) => {
+      const parsed = registryInterface.parseLog(log);
+      if (!parsed) return null;
+      return {
+        trialId: parsed.args.trialId as string,
+        agent: ethers.getAddress(parsed.args.agent as string),
+        capabilityId: parsed.args.capabilityId as string,
+        score: Number(parsed.args.score),
+        evidenceRoot: parsed.args.evidenceRoot as string,
+        expiresAt: Number(parsed.args.expiresAt),
+        transactionHash: log.transactionHash,
+        blockNumber: log.blockNumber
+      };
+    })
+    .filter((event): event is NonNullable<typeof event> => event !== null)
+    .filter(
+      (event) =>
+        event.agent.toLowerCase() !== LEGACY_PLACEHOLDER_AGENT.toLowerCase()
+    )
+    .sort((a, b) => b.blockNumber - a.blockNumber);
+}
+
 app.get("/api/health", (_request, response) => {
   response.json({
     ok: true,
@@ -298,6 +337,86 @@ app.get("/api/challenges/solidity-vault-01", (_request, response) => {
     instructions:
       "Submit your agent's independent security audit. Include concrete vulnerabilities, exploit reasoning, severity, locations, remediation, and explicitly reject false positives."
   });
+});
+
+app.get("/api/registry", async (_request, response) => {
+  try {
+    const events = await readCredentialEvents();
+    const uniqueAgents = new Set(events.map((event) => event.agent.toLowerCase())).size;
+    const passed = events.filter((event) => event.score >= benchmark.hiddenRubric.passMark).length;
+
+    response.json({
+      network: "0G Mainnet",
+      chainId: Number(MAINNET_CHAIN_ID),
+      contract: process.env.PROOFMARKET_CONTRACT_ADDRESS ?? MAINNET_REGISTRY,
+      deploymentBlock: REGISTRY_DEPLOYMENT_BLOCK,
+      capability: benchmark.capability,
+      passMark: benchmark.hiddenRubric.passMark,
+      stats: {
+        credentialsIssued: events.length,
+        uniqueAgents,
+        passed,
+        latestBlock: events[0]?.blockNumber ?? REGISTRY_DEPLOYMENT_BLOCK
+      },
+      recentCredentials: events.slice(0, 6)
+    });
+  } catch (error) {
+    response.status(502).json({
+      error: error instanceof Error ? error.message : "Unable to read registry"
+    });
+  }
+});
+
+app.get("/api/credentials/:wallet", async (request, response) => {
+  try {
+    if (!ethers.isAddress(request.params.wallet)) {
+      response.status(400).json({ error: "Invalid wallet address" });
+      return;
+    }
+
+    const wallet = ethers.getAddress(request.params.wallet);
+    const provider = new ethers.JsonRpcProvider(process.env.ZG_RPC_URL ?? MAINNET_RPC);
+    const registry = new ethers.Contract(
+      process.env.PROOFMARKET_CONTRACT_ADDRESS ?? MAINNET_REGISTRY,
+      registryInterface,
+      provider
+    );
+    const credential = await registry.getCredential(wallet, CAPABILITY_ID);
+    if (Number(credential.issuedAt) === 0) {
+      response.json({ credential: null });
+      return;
+    }
+
+    const events = await readCredentialEvents();
+    const event = events.find(
+      (item) =>
+        item.agent.toLowerCase() === wallet.toLowerCase() &&
+        item.trialId.toLowerCase() === String(credential.trialId).toLowerCase()
+    );
+
+    response.json({
+      credential: {
+        agent: wallet,
+        capability: benchmark.capability,
+        score: Number(credential.score),
+        issuedAt: Number(credential.issuedAt),
+        expiresAt: Number(credential.expiresAt),
+        evidenceRoot: credential.evidenceRoot as string,
+        challengeCommitment: credential.challengeCommitment as string,
+        evaluatorModelHash: credential.evaluatorModelHash as string,
+        trialId: credential.trialId as string,
+        revoked: Boolean(credential.revoked),
+        active:
+          !credential.revoked &&
+          Number(credential.expiresAt) > Math.floor(Date.now() / 1000),
+        transactionHash: event?.transactionHash
+      }
+    });
+  } catch (error) {
+    response.status(502).json({
+      error: error instanceof Error ? error.message : "Unable to read credential"
+    });
+  }
 });
 
 app.post("/api/trials/run", async (request, response) => {
@@ -359,6 +478,7 @@ app.post("/api/trials/run", async (request, response) => {
       storageTxHash: storage.txHash,
       chainTxHash,
       agentWallet: wallet,
+      expiresAt: Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60,
       mode: computeLive && storage.live && Boolean(chainTxHash) ? "live" : "demo"
     });
   } catch (error) {

@@ -106,6 +106,8 @@ h1 em, h2 em { color: var(--acid); font-style: normal; }
 .agent-stats span { color: #747d70; font-size: 10px; }
 .agent-stats strong { color: #d7dcd2; }
 .agent-card > button { width: 100%; margin-top: 17px; border: 0; background: none; display: flex; justify-content: space-between; color: #cdd2c8; font-size: 11px; cursor: pointer; padding: 0; }
+.agent-card > a { width: 100%; margin-top: 17px; display: flex; justify-content: space-between; align-items: center; color: #cdd2c8; font-size: 11px; }
+.registry-empty { grid-column: 1 / -1; min-height: 180px; display: grid; place-items: center; border: 1px dashed var(--line); border-radius: 15px; color: #747d70; font-size: 12px; text-align: center; padding: 24px; }
 
 .arena-section {
   max-width: 1440px; margin: 70px auto; padding: 92px clamp(22px, 6vw, 96px); display: grid; grid-template-columns: .75fr 1.4fr; gap: 75px;
@@ -197,6 +199,10 @@ h1 em, h2 em { color: var(--acid); font-style: normal; }
   min-height: 480px; padding: 29px; overflow: hidden; position: relative; box-shadow: inset 0 1px rgba(255,255,255,.05), 0 30px 80px rgba(0,0,0,.25);
 }
 .passport-card:before { content: ""; position: absolute; width: 330px; height: 330px; border: 70px solid rgba(217,255,67,.025); border-radius: 50%; right: -120px; top: -130px; }
+.passport-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #737c70; }
+.passport-empty svg { color: var(--acid); margin-bottom: 12px; }
+.passport-empty h3 { color: #e5e9df; margin: 5px 0 8px; }
+.passport-empty p { max-width: 430px; line-height: 1.65; font-size: 12px; }
 .passport-noise { position: absolute; inset: 0; opacity: .12; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E"); pointer-events: none; }
 .passport-topline, .passport-identity, .capability-row, .skill-bars, .passport-footer { position: relative; z-index: 1; }
 .passport-topline { display: flex; align-items: center; justify-content: space-between; color: #737d6d; font: 8px "DM Mono"; }

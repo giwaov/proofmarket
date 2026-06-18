@@ -10,6 +10,11 @@ Wallet sessions use RainbowKit and wagmi. The account menu supports disconnect, 
 network correction, explorer links and persistent reconnection. QR/mobile wallets require a public
 WalletConnect/Reown project ID in `VITE_WALLETCONNECT_PROJECT_ID`.
 
+The web interface reads credential counts, agent wallets, scores, expiry dates, evidence roots and
+transaction links directly from `CredentialIssued` events and registry state on 0G Mainnet. It does
+not render sample agents or fabricated marketplace statistics. Legacy placeholder credentials from
+the pre-wallet prototype are explicitly excluded from product analytics and listings.
+
 The production configuration targets **0G Mainnet only**.
 
 ## Live 0G Mainnet deployment

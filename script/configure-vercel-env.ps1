@@ -43,6 +43,11 @@ Set-VercelSecret "ZG_STORAGE_PRIVATE_KEY" $env:ZG_STORAGE_PRIVATE_KEY
 Set-VercelSecret "PROOFMARKET_ISSUER_PRIVATE_KEY" $env:PROOFMARKET_ISSUER_PRIVATE_KEY
 
 Write-Host "Configuring public production settings..."
+if ($env:VITE_WALLETCONNECT_PROJECT_ID) {
+    Set-VercelValue "VITE_WALLETCONNECT_PROJECT_ID" $env:VITE_WALLETCONNECT_PROJECT_ID
+} else {
+    Write-Host "[warn] VITE_WALLETCONNECT_PROJECT_ID is not loaded; injected wallets work, but QR/mobile WalletConnect requires it."
+}
 Set-VercelValue "ZG_COMPUTE_BASE_URL" "https://router-api.0g.ai/v1"
 Set-VercelValue "ZG_COMPUTE_MODEL" "zai-org/GLM-5-FP8"
 Set-VercelValue "ZG_CHAIN_ID" "16661"

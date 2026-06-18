@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { ethers } from "ethers";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useSignMessage, useSwitchChain } from "wagmi";
 import {
   Activity,
   ArrowRight,
@@ -39,10 +41,13 @@ function App() {
   const [result, setResult] = useState<TrialResult | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [showCode, setShowCode] = useState(false);
-  const [wallet, setWallet] = useState("");
   const [challengeStarted, setChallengeStarted] = useState(false);
   const [agentResponse, setAgentResponse] = useState("");
   const [error, setError] = useState("");
+  const { address, chainId, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  const { switchChainAsync } = useSwitchChain();
+  const wallet = address ? ethers.getAddress(address) : "";
 
   const progress = useMemo(
     () =>
@@ -57,48 +62,19 @@ function App() {
     [status]
   );
 
-  async function connectWallet() {
-    setError("");
-    const ethereum = (window as Window & { ethereum?: ethers.Eip1193Provider }).ethereum;
-    if (!ethereum) {
-      setError("Install MetaMask or another EVM wallet to use ProofMarket.");
-      return;
-    }
-
-    try {
-      await ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0x4115" }]
-      });
-    } catch (switchError) {
-      const code = (switchError as { code?: number }).code;
-      if (code !== 4902) throw switchError;
-      await ethereum.request({
-        method: "wallet_addEthereumChain",
-        params: [{
-          chainId: "0x4115",
-          chainName: "0G Mainnet",
-          nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 },
-          rpcUrls: ["https://evmrpc.0g.ai"],
-          blockExplorerUrls: ["https://chainscan.0g.ai"]
-        }]
-      });
-    }
-
-    try {
-      const provider = new ethers.BrowserProvider(ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
-      setWallet(ethers.getAddress(accounts[0]));
-    } catch (walletError) {
-      setError(walletError instanceof Error ? walletError.message : "Wallet connection failed.");
-    }
-  }
-
   async function runTrial() {
     if (status !== "idle" && status !== "complete") return;
     if (!wallet) {
-      await connectWallet();
+      setError("Connect a wallet with RainbowKit before starting the trial.");
       return;
+    }
+    if (chainId !== 16661) {
+      try {
+        await switchChainAsync({ chainId: 16661 });
+      } catch (chainError) {
+        setError(chainError instanceof Error ? chainError.message : "Switch to 0G Mainnet.");
+        return;
+      }
     }
     if (!challengeStarted) {
       setChallengeStarted(true);
@@ -129,10 +105,6 @@ function App() {
     }
 
     try {
-      const ethereum = (window as Window & { ethereum?: ethers.Eip1193Provider }).ethereum;
-      if (!ethereum) throw new Error("Wallet provider disconnected");
-      const provider = new ethers.BrowserProvider(ethereum);
-      const signer = await provider.getSigner();
       const issuedAt = new Date().toISOString();
       const nonce = crypto.randomUUID();
       const responseHash = ethers.keccak256(ethers.toUtf8Bytes(agentResponse));
@@ -145,7 +117,7 @@ function App() {
         `Issued At: ${issuedAt}`,
         "Network: 0G Mainnet (16661)"
       ].join("\n");
-      const signature = await signer.signMessage(message);
+      const signature = await signMessageAsync({ message });
 
       const response = await fetch("/api/trials/run", {
         method: "POST",
@@ -200,9 +172,41 @@ function App() {
 
         <div className="nav-actions">
           <span className="network-pill"><i /> 0G Mainnet</span>
-          <button className={`wallet-btn ${wallet ? "connected" : ""}`} onClick={connectWallet}>
-            {wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "Connect wallet"}
-          </button>
+          <ConnectButton.Custom>
+            {({
+              account,
+              chain,
+              mounted,
+              openAccountModal,
+              openChainModal,
+              openConnectModal
+            }) => {
+              const ready = mounted;
+              const connected = ready && account && chain && isConnected;
+
+              if (!connected) {
+                return (
+                  <button className="wallet-btn" onClick={openConnectModal}>
+                    Connect wallet
+                  </button>
+                );
+              }
+
+              if (chain.unsupported) {
+                return (
+                  <button className="wallet-btn wrong-network" onClick={openChainModal}>
+                    Wrong network
+                  </button>
+                );
+              }
+
+              return (
+                <button className="wallet-btn connected" onClick={openAccountModal}>
+                  {account.displayName}
+                </button>
+              );
+            }}
+          </ConnectButton.Custom>
           <button className="menu-btn" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle menu">
             {mobileOpen ? <X /> : <Menu />}
           </button>

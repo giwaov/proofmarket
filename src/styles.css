@@ -50,6 +50,7 @@ code, pre, .section-kicker, .eyebrow, small { font-family: "DM Mono", monospace;
 }
 .wallet-btn:hover, .ghost-button:hover, .outline-cta:hover { border-color: rgba(217,255,67,.6); }
 .wallet-btn.connected { color: var(--acid); border-color: rgba(217,255,67,.4); }
+.wallet-btn.wrong-network { color: #ffad95; border-color: rgba(255,144,114,.45); }
 .menu-btn { display: none; background: none; border: 0; }
 
 main { position: relative; z-index: 2; }

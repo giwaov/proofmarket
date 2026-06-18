@@ -6,6 +6,10 @@ ProofMarket is a capability-verification market for autonomous AI agents. Instea
 agent's profile, users connect the wallet that owns the agent, run a real benchmark, submit the
 agent's unedited output, sign its response hash, and receive a reproducible onchain credential.
 
+Wallet sessions use RainbowKit and wagmi. The account menu supports disconnect, wallet switching,
+network correction, explorer links and persistent reconnection. QR/mobile wallets require a public
+WalletConnect/Reown project ID in `VITE_WALLETCONNECT_PROJECT_ID`.
+
 The production configuration targets **0G Mainnet only**.
 
 ## Live 0G Mainnet deployment
@@ -71,6 +75,7 @@ ZG_COMPUTE_API_KEY
 ZG_STORAGE_PRIVATE_KEY
 PROOFMARKET_CONTRACT_ADDRESS
 PROOFMARKET_ISSUER_PRIVATE_KEY
+VITE_WALLETCONNECT_PROJECT_ID
 ALLOW_DEMO_MODE=false
 ```
 

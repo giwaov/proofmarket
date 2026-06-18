@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ethers } from "ethers";
 import {
   Activity,
   ArrowRight,
@@ -24,7 +25,7 @@ import {
   Trophy,
   X
 } from "lucide-react";
-import { agents, challengeCode, demoFindings } from "./data";
+import { agents, challengeCode } from "./data";
 import type { TrialResult, TrialStatus } from "./types";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,6 +39,10 @@ function App() {
   const [result, setResult] = useState<TrialResult | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [showCode, setShowCode] = useState(false);
+  const [wallet, setWallet] = useState("");
+  const [challengeStarted, setChallengeStarted] = useState(false);
+  const [agentResponse, setAgentResponse] = useState("");
+  const [error, setError] = useState("");
 
   const progress = useMemo(
     () =>
@@ -52,17 +57,67 @@ function App() {
     [status]
   );
 
+  async function connectWallet() {
+    setError("");
+    const ethereum = (window as Window & { ethereum?: ethers.Eip1193Provider }).ethereum;
+    if (!ethereum) {
+      setError("Install MetaMask or another EVM wallet to use ProofMarket.");
+      return;
+    }
+
+    try {
+      await ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: "0x4115" }]
+      });
+    } catch (switchError) {
+      const code = (switchError as { code?: number }).code;
+      if (code !== 4902) throw switchError;
+      await ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [{
+          chainId: "0x4115",
+          chainName: "0G Mainnet",
+          nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 },
+          rpcUrls: ["https://evmrpc.0g.ai"],
+          blockExplorerUrls: ["https://chainscan.0g.ai"]
+        }]
+      });
+    }
+
+    try {
+      const provider = new ethers.BrowserProvider(ethereum);
+      const accounts = await provider.send("eth_requestAccounts", []);
+      setWallet(ethers.getAddress(accounts[0]));
+    } catch (walletError) {
+      setError(walletError instanceof Error ? walletError.message : "Wallet connection failed.");
+    }
+  }
+
   async function runTrial() {
     if (status !== "idle" && status !== "complete") return;
+    if (!wallet) {
+      await connectWallet();
+      return;
+    }
+    if (!challengeStarted) {
+      setChallengeStarted(true);
+      setShowCode(true);
+      return;
+    }
+    if (agentResponse.trim().length < 120) {
+      setError("Submit a substantive agent audit of at least 120 characters.");
+      return;
+    }
+
     setResult(null);
     setLogs([]);
     setShowCode(false);
+    setError("");
 
     const steps: Array<[TrialStatus, string, number]> = [
-      ["committing", "Challenge sealed · commitment 0x6a4f…19d2", 620],
-      ["running", "Ephemeral sandbox online · agent execution started", 800],
-      ["running", "SENTINEL-9 inspected 18 semantic paths", 760],
-      ["running", "3 candidate vulnerabilities submitted", 720],
+      ["committing", "Verifying wallet ownership and challenge commitment", 420],
+      ["running", "Signed agent submission accepted", 520],
       ["judging", "0G Compute jury evaluating against hidden rubric", 950],
       ["anchoring", "Verdict signed · packaging reproducible evidence", 720]
     ];
@@ -74,37 +129,53 @@ function App() {
     }
 
     try {
+      const ethereum = (window as Window & { ethereum?: ethers.Eip1193Provider }).ethereum;
+      if (!ethereum) throw new Error("Wallet provider disconnected");
+      const provider = new ethers.BrowserProvider(ethereum);
+      const signer = await provider.getSigner();
+      const issuedAt = new Date().toISOString();
+      const nonce = crypto.randomUUID();
+      const responseHash = ethers.keccak256(ethers.toUtf8Bytes(agentResponse));
+      const message = [
+        "ProofMarket Capability Trial",
+        `Wallet: ${wallet}`,
+        "Challenge: solidity-vault-01",
+        `Response Hash: ${responseHash}`,
+        `Nonce: ${nonce}`,
+        `Issued At: ${issuedAt}`,
+        "Network: 0G Mainnet (16661)"
+      ].join("\n");
+      const signature = await signer.signMessage(message);
+
       const response = await fetch("/api/trials/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId: "sentinel-9", challengeId: "solidity-vault-01" })
+        body: JSON.stringify({
+          wallet,
+          challengeId: "solidity-vault-01",
+          agentResponse,
+          nonce,
+          issuedAt,
+          signature
+        })
       });
-      if (!response.ok) throw new Error("Trial API unavailable");
+      if (!response.ok) {
+        const failure = await response.json().catch(() => ({ error: "Trial failed" }));
+        throw new Error(failure.error ?? "Trial failed");
+      }
       const payload = (await response.json()) as TrialResult;
       setResult(payload);
-    } catch {
-      setResult({
-        trialId: "PM-4821-7A",
-        score: 94,
-        passed: true,
-        percentile: 97,
-        model: "zai-org/GLM-5-FP8",
-        findings: demoFindings,
-        rubric: { accuracy: 98, exploitability: 96, remediation: 89, restraint: 93 },
-        judgeSummary:
-          "The agent identified both exploitable vulnerabilities, ranked severity correctly, and proposed safe remediation without inventing unsupported findings.",
-        evidenceRoot: "0x827a845c2f0c977a8caee9fb47f681d13452a4c74b9b51b5616fd302cc8a12be",
-        chainTxHash: "0x2a8ce639ad30b7f79a3488c102cfd8ab551a06136f71693cae34407edb5873f1",
-        mode: "demo"
-      });
+      setLogs((current) => [
+        ...current,
+        "Evidence anchored to 0G Storage",
+        "Capability Passport issued to connected wallet"
+      ]);
+      setStatus("complete");
+    } catch (trialError) {
+      setError(trialError instanceof Error ? trialError.message : "Trial failed.");
+      setStatus("idle");
+      setShowCode(true);
     }
-
-    setLogs((current) => [
-      ...current,
-      "Evidence anchored to 0G Storage",
-      "Capability Passport issued on 0G Chain"
-    ]);
-    setStatus("complete");
   }
 
   const isActive = status !== "idle" && status !== "complete";
@@ -129,7 +200,9 @@ function App() {
 
         <div className="nav-actions">
           <span className="network-pill"><i /> 0G Mainnet</span>
-          <button className="wallet-btn">Connect wallet</button>
+          <button className={`wallet-btn ${wallet ? "connected" : ""}`} onClick={connectWallet}>
+            {wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "Connect wallet"}
+          </button>
           <button className="menu-btn" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle menu">
             {mobileOpen ? <X /> : <Menu />}
           </button>
@@ -149,25 +222,25 @@ function App() {
             <a href="#protocol" className="text-cta">Explore the protocol <ChevronRight size={17} /></a>
           </div>
           <div className="trust-row">
-            <div><strong>2,847</strong><span>trials completed</span></div>
-            <div><strong>91.4%</strong><span>verdict agreement</span></div>
-            <div><strong>412</strong><span>verified agents</span></div>
-            <div><strong>$128k</strong><span>work routed by proof</span></div>
+            <div><strong>1</strong><span>live adversarial benchmark</span></div>
+            <div><strong>3</strong><span>0G proof layers</span></div>
+            <div><strong>90d</strong><span>credential validity</span></div>
+            <div><strong>16661</strong><span>0G Mainnet chain</span></div>
           </div>
         </section>
 
         <section className="market-section" id="market">
           <div className="section-heading">
             <div>
-              <span className="section-kicker">MARKET SIGNAL</span>
-              <h2>Hire the proof, not the pitch.</h2>
+              <span className="section-kicker">CAPABILITY PASSPORT DESIGN</span>
+              <h2>Proof profiles, not paid rankings.</h2>
             </div>
             <button className="ghost-button">View all agents <ArrowRight size={16} /></button>
           </div>
           <div className="agent-grid">
             {agents.map((agent, index) => (
               <article className={`agent-card ${index === 0 ? "featured" : ""}`} key={agent.name}>
-                {index === 0 && <span className="featured-tag"><Trophy size={12} /> TOP VERIFIED</span>}
+                {index === 0 && <span className="featured-tag"><Trophy size={12} /> EXAMPLE PASSPORT</span>}
                 <div className="agent-top">
                   <div className="agent-avatar" style={{ "--accent": agent.accent } as React.CSSProperties}>
                     {agent.glyph}
@@ -189,7 +262,7 @@ function App() {
                   <span><strong>{agent.rate}</strong></span>
                 </div>
                 <button onClick={() => document.getElementById("arena")?.scrollIntoView({ behavior: "smooth" })}>
-                  Inspect passport <ArrowRight size={15} />
+                  Preview passport <ArrowRight size={15} />
                 </button>
               </article>
             ))}
@@ -201,8 +274,8 @@ function App() {
             <span className="section-kicker">LIVE TRIAL #PM-4821</span>
             <h2>The claim is easy.<br /><em>The trial is not.</em></h2>
             <p>
-              SENTINEL-9 claims expert-level Solidity auditing. We give it an unseen vulnerable
-              contract, isolate its execution, and ask an independent 0G jury to score the evidence.
+              Connect the wallet that owns your agent, reveal the benchmark, run the audit using
+              your own agent, and submit its unedited response to an independent 0G jury.
             </p>
             <div className="trial-specs">
               <div><LockKeyhole size={17} /><span><small>CHALLENGE</small>Sealed until execution</span></div>
@@ -222,7 +295,7 @@ function App() {
 
             <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
 
-            {status === "idle" ? (
+            {status === "idle" && !challengeStarted ? (
               <div className="console-ready">
                 <div className="scan-orb">
                   <Radar size={64} strokeWidth={1.15} />
@@ -232,9 +305,35 @@ function App() {
                 <h3>YieldVault Adversarial Audit</h3>
                 <p>3 planted issues · 2 exploitable · 1 deliberate decoy</p>
                 <button className="run-button" onClick={runTrial}>
-                  <TerminalSquare size={18} /> Run live capability trial
+                  <TerminalSquare size={18} /> {wallet ? "Begin signed trial" : "Connect wallet to begin"}
                 </button>
-                <small>No agent has seen this challenge before.</small>
+                <small>The resulting credential belongs to your connected wallet.</small>
+              </div>
+            ) : status === "idle" ? (
+              <div className="submission-workspace">
+                <div className="panel-label">
+                  <span>LIVE BENCHMARK · COMMITMENT VERIFIED</span>
+                  <span>{wallet.slice(0, 6)}…{wallet.slice(-4)}</span>
+                </div>
+                <div className="challenge-columns">
+                  <div>
+                    <small>CHALLENGE SOURCE</small>
+                    <pre className="code-view"><code>{challengeCode}</code></pre>
+                  </div>
+                  <div>
+                    <small>YOUR AGENT'S UNEDITED RESPONSE</small>
+                    <textarea
+                      className="response-input"
+                      value={agentResponse}
+                      onChange={(event) => setAgentResponse(event.target.value)}
+                      placeholder="Paste the exact output from your auditing agent. Include findings, severity, exploit reasoning, locations, remediation, and rejected false positives."
+                    />
+                  </div>
+                </div>
+                {error && <div className="error-banner">{error}</div>}
+                <button className="run-button submit-trial" onClick={runTrial}>
+                  <Fingerprint size={18} /> Sign and submit real trial
+                </button>
               </div>
             ) : (
               <div className="console-body">
@@ -269,9 +368,9 @@ function App() {
                       </div>
                       <div>
                         <span className="pass-badge">
-                          <ShieldCheck size={15} /> PASSED · {result.mode === "live" ? "0G MAINNET" : "DEMO PREVIEW"}
+                          <ShieldCheck size={15} /> {result.passed ? "PASSED" : "SCORED"} · {result.mode === "live" ? "0G MAINNET" : "PREVIEW"}
                         </span>
-                        <h3>Expert capability verified</h3>
+                        <h3>{result.passed ? "Expert capability verified" : "Capability scored below threshold"}</h3>
                         <p>Top {100 - result.percentile}% of all audited agents</p>
                       </div>
                     </div>
@@ -285,6 +384,14 @@ function App() {
                       ))}
                     </div>
                     <p className="judge-note">“{result.judgeSummary}”</p>
+                    <div className="evidence-links">
+                      {result.chainTxHash && (
+                        <a href={`https://chainscan.0g.ai/tx/${result.chainTxHash}`} target="_blank" rel="noreferrer">
+                          View credential transaction <ArrowRight size={13} />
+                        </a>
+                      )}
+                      <span>Evidence root: {shortHash(result.evidenceRoot)}</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -319,22 +426,22 @@ function App() {
                 <div className="passport-avatar">S9<span /></div>
                 <div>
                   <small>VERIFIED AUTONOMOUS AGENT</small>
-                  <h3>SENTINEL-9 <BadgeCheck size={20} /></h3>
-                  <code>did:0g:agent:71b4a09e</code>
+                  <h3>{wallet ? "YOUR AGENT" : "SENTINEL-9"} <BadgeCheck size={20} /></h3>
+                  <code>{wallet ? `did:0g:agent:${wallet.toLowerCase()}` : "connect wallet to issue"}</code>
                 </div>
                 <div className="passport-grade"><span>GRADE</span><strong>A+</strong></div>
               </div>
               <div className="capability-row">
                 <div><small>CAPABILITY</small><strong>Solidity Security Audit</strong></div>
-                <div><small>PROOF SCORE</small><strong>94 <span>/ 100</span></strong></div>
+                <div><small>PROOF SCORE</small><strong>{result?.score ?? "—"} <span>/ 100</span></strong></div>
                 <div><small>VALID UNTIL</small><strong>18 SEP 2026</strong></div>
               </div>
               <div className="skill-bars">
                 {[
-                  ["Vulnerability accuracy", 98],
-                  ["Exploit reasoning", 96],
-                  ["Remediation quality", 89],
-                  ["Hallucination restraint", 93]
+                  ["Vulnerability accuracy", result?.rubric.accuracy ?? 0],
+                  ["Exploit reasoning", result?.rubric.exploitability ?? 0],
+                  ["Remediation quality", result?.rubric.remediation ?? 0],
+                  ["Hallucination restraint", result?.rubric.restraint ?? 0]
                 ].map(([label, value]) => (
                   <div key={label as string}>
                     <span>{label}</span><i><b style={{ width: `${value}%` }} /></i><strong>{value}</strong>
@@ -386,7 +493,7 @@ function App() {
             {[
               [Fingerprint, "01", "CLAIM", "Agent declares a capability and stakes its reputation."],
               [LockKeyhole, "02", "CHALLENGE", "A sealed, unseen benchmark is committed onchain."],
-              [Activity, "03", "PROVE", "The agent performs inside an observable sandbox."],
+              [Activity, "03", "PROVE", "The owner signs and submits the agent's unedited output."],
               [ShieldCheck, "04", "ISSUE", "0G jury scores evidence and issues the passport."]
             ].map(([Icon, no, title, body], index) => {
               const FlowIcon = Icon as typeof Fingerprint;
@@ -408,7 +515,9 @@ function App() {
             <h2>When agents can prove what they know,<br />they can finally earn what they’re worth.</h2>
           </div>
           <div className="economy-actions">
-            <button className="primary-cta">Verify your agent <ArrowRight size={18} /></button>
+            <button className="primary-cta" onClick={() => document.getElementById("arena")?.scrollIntoView({ behavior: "smooth" })}>
+              Verify your agent <ArrowRight size={18} />
+            </button>
             <button className="outline-cta"><CircleDollarSign size={18} /> Post a paid challenge</button>
           </div>
         </section>
@@ -418,7 +527,7 @@ function App() {
         <div className="brand"><span className="brand-mark"><Fingerprint size={20} /></span> PROOF<span>MARKET</span></div>
         <p>Verifiable capability for the autonomous economy. Built on 0G.</p>
         <div>
-          <a href="https://github.com" aria-label="GitHub"><Github size={18} /></a>
+          <a href="https://github.com/giwaov/proofmarket" aria-label="GitHub"><Github size={18} /></a>
           <a href="https://0g.ai" aria-label="0G"><Globe2 size={18} /></a>
         </div>
       </footer>

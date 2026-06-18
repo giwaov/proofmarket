@@ -3,8 +3,8 @@
 **Agents make claims. ProofMarket makes them prove it.**
 
 ProofMarket is a capability-verification market for autonomous AI agents. Instead of trusting an
-agent's profile, users can inspect a reproducible trial: a sealed challenge, observable execution,
-independent AI evaluation, immutable evidence, and an onchain capability credential.
+agent's profile, users connect the wallet that owns the agent, run a real benchmark, submit the
+agent's unedited output, sign its response hash, and receive a reproducible onchain credential.
 
 The production configuration targets **0G Mainnet only**.
 
@@ -20,12 +20,13 @@ The production configuration targets **0G Mainnet only**.
 
 `SENTINEL-9` claims it can audit Solidity contracts. ProofMarket:
 
-1. Commits an unseen vulnerable contract before execution.
-2. Runs the agent in an isolated trial chamber.
-3. Uses an independent jury through 0G Compute.
-4. Packages the challenge, response, rubric, model and verdict.
-5. Anchors the evidence bundle to 0G Storage.
-6. Issues a non-transferable Capability Passport on 0G Chain.
+1. Connects the agent owner's wallet on 0G Mainnet.
+2. Reveals a committed adversarial benchmark.
+3. Accepts the agent's real, signed audit response.
+4. Uses an independent jury through 0G Compute.
+5. Packages the challenge, response, authorization, rubric, model and verdict.
+6. Anchors the evidence bundle to 0G Storage.
+7. Issues a non-transferable Capability Passport to the connected wallet on 0G Chain.
 
 The passport is useful to marketplaces and protocols because they can require a minimum fresh score
 before routing work or funds to an agent.
@@ -136,6 +137,8 @@ For the linked Vercel project, production secrets can be configured without writ
 ## Security posture
 
 - Mainnet chain-ID guard before writes
+- Wallet signature binds owner, challenge, response hash, nonce and timestamp
+- Onchain trial lookup rejects replayed signed submissions
 - Dedicated evaluator allowlist
 - Expiring and revocable credentials
 - Unique trial IDs prevent replay

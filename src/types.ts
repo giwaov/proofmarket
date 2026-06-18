@@ -24,5 +24,6 @@ export type TrialResult = {
   evidenceRoot: string;
   storageTxHash?: string;
   chainTxHash?: string;
+  agentWallet: string;
   mode: "live" | "demo";
 };

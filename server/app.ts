@@ -1,5 +1,4 @@
 import "dotenv/config";
-import crypto from "node:crypto";
 import express from "express";
 import { ethers } from "ethers";
 import OpenAI from "openai";
@@ -38,13 +37,40 @@ const evaluationSchema = z.object({
 
 type Evaluation = z.infer<typeof evaluationSchema>;
 
+const trialRequestSchema = z.object({
+  wallet: z.string().refine(ethers.isAddress, "Invalid wallet address"),
+  challengeId: z.literal("solidity-vault-01"),
+  agentResponse: z.string().min(120).max(20_000),
+  nonce: z.string().min(16).max(128),
+  issuedAt: z.string().datetime(),
+  signature: z.string().min(130).max(132)
+});
+
+export function buildAuthorizationMessage(input: {
+  wallet: string;
+  challengeId: string;
+  responseHash: string;
+  nonce: string;
+  issuedAt: string;
+}) {
+  return [
+    "ProofMarket Capability Trial",
+    `Wallet: ${ethers.getAddress(input.wallet)}`,
+    `Challenge: ${input.challengeId}`,
+    `Response Hash: ${input.responseHash}`,
+    `Nonce: ${input.nonce}`,
+    `Issued At: ${input.issuedAt}`,
+    "Network: 0G Mainnet (16661)"
+  ].join("\n");
+}
+
 function extractJson(value: string) {
   const fenced = value.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced?.[1] ?? value.slice(value.indexOf("{"), value.lastIndexOf("}") + 1);
   return JSON.parse(candidate);
 }
 
-async function runComputeJury(): Promise<{ evaluation: Evaluation; model: string; live: boolean }> {
+async function runComputeJury(agentResponse: string): Promise<{ evaluation: Evaluation; model: string; live: boolean }> {
   const apiKey = process.env.ZG_COMPUTE_API_KEY;
   const model = process.env.ZG_COMPUTE_MODEL ?? "zai-org/GLM-5-FP8";
 
@@ -71,13 +97,7 @@ HIDDEN RUBRIC:
 ${JSON.stringify(benchmark.hiddenRubric, null, 2)}
 
 AGENT RESPONSE:
-1. CRITICAL: withdraw() is reentrant because value is sent before balances[msg.sender] is reduced.
-   Exploit: a receiver fallback repeatedly calls withdraw while the old balance remains.
-   Fix: checks-effects-interactions plus ReentrancyGuard.
-2. HIGH: setStrategist authenticates with tx.origin, allowing a malicious intermediary contract to
-   trick the strategist into changing control. Fix: use msg.sender with explicit role ownership.
-3. MEDIUM: next may be address(0), permanently disabling strategist-authorized operations.
-4. Correctly rejected "missing SafeMath" as a false positive under Solidity 0.8.
+${agentResponse}
 
 Required JSON shape:
 {
@@ -111,16 +131,23 @@ Required JSON shape:
   };
 }
 
-async function buildEvidenceBundle(evaluation: Evaluation, model: string) {
+async function buildEvidenceBundle(input: {
+  trialId: string;
+  wallet: string;
+  agentResponse: string;
+  authorizationMessage: string;
+  signature: string;
+  evaluation: Evaluation;
+  model: string;
+}) {
   const issuedAt = new Date().toISOString();
   const challengeCommitment = ethers.keccak256(ethers.toUtf8Bytes(benchmark.source));
   const bundle = {
     schema: "proofmarket/evidence-bundle@1",
-    trialId: `PM-${Date.now().toString(36).toUpperCase()}`,
+    trialId: input.trialId,
     agent: {
-      id: "did:0g:agent:71b4a09e",
-      name: "SENTINEL-9",
-      wallet: "0x71B400000000000000000000000000000000A09E"
+      id: `did:0g:agent:${input.wallet.toLowerCase()}`,
+      wallet: ethers.getAddress(input.wallet)
     },
     capability: benchmark.capability,
     challenge: {
@@ -129,15 +156,15 @@ async function buildEvidenceBundle(evaluation: Evaluation, model: string) {
       source: benchmark.source
     },
     execution: {
-      sandbox: "proofmarket-ephemeral-v1",
-      responseDigest: ethers.keccak256(
-        ethers.toUtf8Bytes(JSON.stringify(evaluation.findings))
-      )
+      submission: input.agentResponse,
+      responseDigest: ethers.keccak256(ethers.toUtf8Bytes(input.agentResponse)),
+      authorizationMessage: input.authorizationMessage,
+      walletSignature: input.signature
     },
     jury: {
       network: "0G Compute",
-      model,
-      verdict: evaluation
+      model: input.model,
+      verdict: input.evaluation
     },
     issuedAt
   };
@@ -184,6 +211,7 @@ async function anchorToStorage(json: string) {
 
 async function issueOnchainCredential(input: {
   trialId: string;
+  agent: string;
   score: number;
   evidenceRoot: string;
   model: string;
@@ -213,7 +241,7 @@ async function issueOnchainCredential(input: {
 
   const transaction = await contract.issueCredential(
     ethers.id(input.trialId),
-    "0x71B400000000000000000000000000000000A09E",
+    ethers.getAddress(input.agent),
     ethers.id(benchmark.capability),
     input.score,
     input.evidenceRoot,
@@ -245,13 +273,65 @@ app.get("/api/health", (_request, response) => {
   });
 });
 
-app.post("/api/trials/run", async (_request, response) => {
+app.get("/api/challenges/solidity-vault-01", (_request, response) => {
+  response.json({
+    id: benchmark.id,
+    title: benchmark.title,
+    capability: benchmark.capability,
+    source: benchmark.source,
+    commitment: ethers.keccak256(ethers.toUtf8Bytes(benchmark.source)),
+    passMark: benchmark.hiddenRubric.passMark,
+    instructions:
+      "Submit your agent's independent security audit. Include concrete vulnerabilities, exploit reasoning, severity, locations, remediation, and explicitly reject false positives."
+  });
+});
+
+app.post("/api/trials/run", async (request, response) => {
   try {
-    const { evaluation, model, live: computeLive } = await runComputeJury();
-    const { bundle, json } = await buildEvidenceBundle(evaluation, model);
+    const input = trialRequestSchema.parse(request.body);
+    const issuedAtMs = Date.parse(input.issuedAt);
+    if (Math.abs(Date.now() - issuedAtMs) > 10 * 60 * 1000) {
+      throw new Error("Wallet authorization expired; sign the trial again");
+    }
+
+    const wallet = ethers.getAddress(input.wallet);
+    const responseHash = ethers.keccak256(ethers.toUtf8Bytes(input.agentResponse));
+    const authorizationMessage = buildAuthorizationMessage({
+      wallet,
+      challengeId: input.challengeId,
+      responseHash,
+      nonce: input.nonce,
+      issuedAt: input.issuedAt
+    });
+    const recovered = ethers.verifyMessage(authorizationMessage, input.signature);
+    if (recovered !== wallet) throw new Error("Wallet signature does not match trial owner");
+
+    const signatureHash = ethers.keccak256(input.signature as `0x${string}`);
+    const trialId = `PM-${signatureHash.slice(2, 18).toUpperCase()}`;
+
+    const provider = new ethers.JsonRpcProvider(process.env.ZG_RPC_URL ?? MAINNET_RPC);
+    const registry = new ethers.Contract(
+      process.env.PROOFMARKET_CONTRACT_ADDRESS ?? MAINNET_REGISTRY,
+      ["function trials(bytes32) view returns (address agent,bytes32 capabilityId,uint16 score,bytes32 evidenceRoot,uint64 completedAt)"],
+      provider
+    );
+    const previous = (await registry.trials(ethers.id(trialId))) as { completedAt: bigint };
+    if (previous.completedAt > 0n) throw new Error("This signed trial was already submitted");
+
+    const { evaluation, model, live: computeLive } = await runComputeJury(input.agentResponse);
+    const { bundle, json } = await buildEvidenceBundle({
+      trialId,
+      wallet,
+      agentResponse: input.agentResponse,
+      authorizationMessage,
+      signature: input.signature,
+      evaluation,
+      model
+    });
     const storage = await anchorToStorage(json);
     const chainTxHash = await issueOnchainCredential({
       trialId: bundle.trialId,
+      agent: wallet,
       score: evaluation.score,
       evidenceRoot: storage.rootHash,
       model
@@ -264,7 +344,8 @@ app.post("/api/trials/run", async (_request, response) => {
       evidenceRoot: storage.rootHash,
       storageTxHash: storage.txHash,
       chainTxHash,
-      mode: computeLive && storage.live ? "live" : "demo"
+      agentWallet: wallet,
+      mode: computeLive && storage.live && Boolean(chainTxHash) ? "live" : "demo"
     });
   } catch (error) {
     console.error(error);

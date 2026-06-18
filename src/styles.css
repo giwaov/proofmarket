@@ -49,6 +49,7 @@ code, pre, .section-kicker, .eyebrow, small { font-family: "DM Mono", monospace;
   font-size: 12px; font-weight: 700; cursor: pointer;
 }
 .wallet-btn:hover, .ghost-button:hover, .outline-cta:hover { border-color: rgba(217,255,67,.6); }
+.wallet-btn.connected { color: var(--acid); border-color: rgba(217,255,67,.4); }
 .menu-btn { display: none; background: none; border: 0; }
 
 main { position: relative; z-index: 2; }
@@ -139,6 +140,19 @@ h1 em, h2 em { color: var(--acid); font-style: normal; }
 .console-ready p { color: #717a6d; font-size: 11px; margin: 0 0 24px; }
 .run-button { display: flex; align-items: center; gap: 9px; background: var(--acid); color: #10120d; font-weight: 800; border: 0; border-radius: 8px; padding: 13px 17px; cursor: pointer; }
 .console-ready > small { margin-top: 15px; color: #596156; font-size: 8px; }
+.submission-workspace { padding: 19px; min-height: 478px; }
+.submission-workspace > .panel-label { border: 1px solid var(--line); border-radius: 9px 9px 0 0; }
+.challenge-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.challenge-columns > div { min-width: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: rgba(255,255,255,.012); }
+.challenge-columns > div > small { display: block; padding: 11px 13px; color: #70786d; font-size: 8px; letter-spacing: .1em; border-bottom: 1px solid var(--line); }
+.challenge-columns .code-view { height: 280px; max-height: 280px; }
+.response-input {
+  display: block; resize: vertical; width: 100%; height: 280px; padding: 14px; border: 0; outline: 0;
+  background: transparent; color: #c8d0c2; font: 10px/1.65 "DM Mono"; min-height: 220px;
+}
+.response-input::placeholder { color: #4f574d; }
+.error-banner { margin-top: 12px; border: 1px solid rgba(255,144,114,.35); background: rgba(255,144,114,.07); color: #ffad95; padding: 10px 12px; border-radius: 8px; font-size: 10px; }
+.submit-trial { margin: 14px auto 0; }
 .console-body { padding: 19px; }
 .execution-panel, .verdict-panel { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: rgba(255,255,255,.012); }
 .panel-label { height: 38px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; padding: 0 13px; color: #70786d; font: 9px "DM Mono"; letter-spacing: .1em; }
@@ -172,6 +186,8 @@ h1 em, h2 em { color: var(--acid); font-style: normal; }
 .findings-list p small { color: #5f685c; font-size: 7px; margin-top: 2px; }
 .findings-list b { font: 9px "DM Mono"; color: #929b8e; }
 .judge-note { font-size: 9px; line-height: 1.55; color: #7b8477; margin: 11px 0 0; font-style: italic; }
+.evidence-links { display: flex; justify-content: space-between; gap: 10px; margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--line); font: 8px "DM Mono"; color: #6f786b; }
+.evidence-links a { display: flex; align-items: center; gap: 5px; color: var(--acid); }
 
 .passport-heading > p { color: #899285; max-width: 420px; font-size: 13px; line-height: 1.7; margin: 0; }
 .passport-layout { display: grid; grid-template-columns: 1.45fr .75fr; gap: 22px; align-items: stretch; }
@@ -263,6 +279,8 @@ footer p { font-size: 10px; } footer > div:last-child { display: flex; gap: 15px
   .arena-section { padding: 70px 22px; margin: 30px auto; }
   .console-header { grid-template-columns: 1fr 1fr; }
   .console-header > span:nth-child(2) { display: none; }
+  .challenge-columns { grid-template-columns: 1fr; }
+  .challenge-columns .code-view, .response-input { height: 230px; max-height: 230px; }
   .passport-card { padding: 20px; min-height: 530px; }
   .passport-identity { grid-template-columns: 62px 1fr; }
   .passport-avatar { width: 62px; height: 62px; }

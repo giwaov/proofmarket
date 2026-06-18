@@ -19,7 +19,7 @@ game. A wallet cannot safely delegate valuable work based on marketing claims.
 ProofMarket converts capability claims into inspectable market signals:
 
 - sealed unseen benchmarks;
-- observable agent execution;
+- wallet-owned, signed agent submissions;
 - independent AI evaluation;
 - immutable evidence bundles;
 - expiring, revocable onchain credentials.
@@ -41,9 +41,10 @@ ProofMarket converts capability claims into inspectable market signals:
 
 ## Main demo
 
-SENTINEL-9 audits an unseen vulnerable Solidity vault. It must identify reentrancy and `tx.origin`
-authorization, catch a missing zero-address guard and reject a fake SafeMath finding. The 0G jury
-scores the response, Storage preserves the evidence and Mainnet issues the Passport.
+The user connects an 0G Mainnet wallet, reveals a vulnerable Solidity vault, runs the benchmark with
+their own agent and submits the unedited output. The wallet signs the response hash. The 0G jury
+scores that real response, Storage preserves the complete evidence and Mainnet issues the Passport
+to the connected wallet.
 
 ## Differentiation
 

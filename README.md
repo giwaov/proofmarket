@@ -127,6 +127,12 @@ test/        Foundry contract tests
 See [ARCHITECTURE.md](ARCHITECTURE.md), [DEPLOYMENT.md](DEPLOYMENT.md), and
 [DEMO_SCRIPT.md](DEMO_SCRIPT.md).
 
+For the linked Vercel project, production secrets can be configured without writing them to disk:
+
+```powershell
+.\script\configure-vercel-env.ps1
+```
+
 ## Security posture
 
 - Mainnet chain-ID guard before writes

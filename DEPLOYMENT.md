@@ -71,3 +71,16 @@ Run one low-value trial and confirm:
 - the evidence root in the API response matches the credential event;
 - `verifyCapability(agent, capabilityId, minimumScore)` returns `true`;
 - the UI labels the result `live`, never `demo`.
+
+## Vercel production
+
+After linking the project with Vercel, load the three secrets in the current PowerShell session and
+run:
+
+```powershell
+.\script\configure-vercel-env.ps1
+```
+
+The script sends secrets directly to Vercel as sensitive production variables, configures the
+public 0G Mainnet settings, and triggers a production redeployment. It does not write secrets to
+disk or print their values.

@@ -1,0 +1,14 @@
+{
+  "network": "0G Mainnet",
+  "chainId": 16661,
+  "rpcUrl": "https://evmrpc.0g.ai",
+  "explorerUrl": "https://chainscan.0g.ai",
+  "contract": "ProofMarketRegistry",
+  "address": "0xdEd45520Ea0f3740d6e5f76363d245342d290287",
+  "deployer": "0x28abA2DFcf42eAdfEe60CeBFA650aC7184652424",
+  "transactionHash": "0xb2f32ff91943dd6fb7e75c9bf7fff613bf7c3609067c92268a7cb03e4ab2f547",
+  "blockNumber": 36453629,
+  "gasUsed": 700763,
+  "runtimeCodeBytes": 2776,
+  "verifiedByRpc": true
+}

@@ -375,13 +375,24 @@ function App() {
                       </div>
                     </div>
                     <div className="findings-list">
-                      {result.findings.map((finding) => (
-                        <div key={finding.title}>
-                          <span className={`severity ${finding.severity.toLowerCase()}`}>{finding.severity}</span>
-                          <p><strong>{finding.title}</strong><small>{finding.location}</small></p>
-                          <b>{finding.confidence}%</b>
+                      {result.findings.length > 0 ? (
+                        result.findings.map((finding) => (
+                          <div key={finding.title}>
+                            <span className={`severity ${finding.severity.toLowerCase()}`}>{finding.severity}</span>
+                            <p><strong>{finding.title}</strong><small>{finding.location}</small></p>
+                            <b>{finding.confidence}%</b>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="empty-findings">
+                          <span className="severity critical">NONE</span>
+                          <p>
+                            <strong>No valid vulnerabilities identified</strong>
+                            <small>The submission was scored and preserved as an unsuccessful attempt.</small>
+                          </p>
+                          <b>0</b>
                         </div>
-                      ))}
+                      )}
                     </div>
                     <p className="judge-note">“{result.judgeSummary}”</p>
                     <div className="evidence-links">

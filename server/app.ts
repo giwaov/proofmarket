@@ -26,7 +26,7 @@ const evaluationSchema = z.object({
   score: z.number().min(0).max(100),
   passed: z.boolean(),
   percentile: z.number().min(0).max(100),
-  findings: z.array(findingSchema).min(1).max(6),
+  findings: z.array(findingSchema).max(6),
   rubric: z.object({
     accuracy: z.number().min(0).max(100),
     exploitability: z.number().min(0).max(100),
@@ -125,8 +125,21 @@ Required JSON shape:
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error("0G Compute returned an empty verdict");
 
+  const parsed = extractJson(content) as Record<string, unknown>;
+  if (!Array.isArray(parsed.findings)) parsed.findings = [];
+  const parsedFindings = parsed.findings as unknown[];
+  if (parsedFindings.length === 0) {
+    parsed.passed = false;
+    parsed.score = Math.min(Number(parsed.score ?? 0), 50);
+    parsed.percentile = Math.min(Number(parsed.percentile ?? 0), 25);
+    parsed.judgeSummary =
+      typeof parsed.judgeSummary === "string" && parsed.judgeSummary.length > 0
+        ? parsed.judgeSummary
+        : "The submission did not identify any valid security findings.";
+  }
+
   return {
-    evaluation: evaluationSchema.parse(extractJson(content)),
+    evaluation: evaluationSchema.parse(parsed),
     model,
     live: true
   };

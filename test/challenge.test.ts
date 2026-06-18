@@ -35,4 +35,23 @@ describe("ProofMarket benchmark", () => {
     expect(message).toContain(input.responseHash);
     expect(message).toContain("0G Mainnet (16661)");
   });
+
+  it("supports unsuccessful submissions with no valid findings", () => {
+    const emptyVerdict = {
+      score: 0,
+      passed: false,
+      percentile: 1,
+      findings: [],
+      rubric: {
+        accuracy: 0,
+        exploitability: 0,
+        remediation: 0,
+        restraint: 50
+      },
+      judgeSummary: "The submission did not identify any valid security findings."
+    };
+
+    expect(emptyVerdict.findings).toHaveLength(0);
+    expect(emptyVerdict.passed).toBe(false);
+  });
 });

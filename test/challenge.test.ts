@@ -54,4 +54,16 @@ describe("ProofMarket benchmark", () => {
     expect(emptyVerdict.findings).toHaveLength(0);
     expect(emptyVerdict.passed).toBe(false);
   });
+
+  it("keeps trial authorization messages deterministic", () => {
+    const input = {
+      wallet: "0x28abA2DFcf42eAdfEe60CeBFA650aC7184652424",
+      challengeId: benchmark.id,
+      responseHash: ethers.id("same response"),
+      nonce: "same-proofmarket-nonce",
+      issuedAt: "2026-06-18T19:00:00.000Z"
+    };
+
+    expect(buildAuthorizationMessage(input)).toBe(buildAuthorizationMessage(input));
+  });
 });

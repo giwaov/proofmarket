@@ -363,9 +363,23 @@ app.post("/api/trials/run", async (request, response) => {
     });
   } catch (error) {
     console.error(error);
-    response.status(500).json({
-      error: error instanceof Error ? error.message : "Trial failed"
-    });
+    if (error instanceof z.ZodError) {
+      response.status(400).json({
+        error: "Invalid trial submission",
+        issues: error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message
+        }))
+      });
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : "Trial failed";
+    const isClientError =
+      message.includes("signature") ||
+      message.includes("authorization") ||
+      message.includes("already submitted");
+    response.status(isClientError ? 400 : 500).json({ error: message });
   }
 });
 

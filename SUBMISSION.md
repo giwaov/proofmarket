@@ -33,6 +33,7 @@ ProofMarket converts capability claims into inspectable market signals:
 ## Verified mainnet deployment
 
 - Live application: [https://proofmarket-alpha.vercel.app](https://proofmarket-alpha.vercel.app)
+- Public repository: [https://github.com/giwaov/proofmarket](https://github.com/giwaov/proofmarket)
 - Contract: [`0xdEd45520Ea0f3740d6e5f76363d245342d290287`](https://chainscan.0g.ai/address/0xdEd45520Ea0f3740d6e5f76363d245342d290287)
 - Transaction: [`0xb2f32ff91943dd6fb7e75c9bf7fff613bf7c3609067c92268a7cb03e4ab2f547`](https://chainscan.0g.ai/tx/0xb2f32ff91943dd6fb7e75c9bf7fff613bf7c3609067c92268a7cb03e4ab2f547)
 - Block: `36,453,629`

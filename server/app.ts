@@ -11,6 +11,7 @@ const MAINNET_RPC = "https://evmrpc.0g.ai";
 const MAINNET_STORAGE_INDEXER = "https://indexer-storage-turbo.0g.ai";
 const MAINNET_COMPUTE_ROUTER = "https://router-api.0g.ai/v1";
 const MAINNET_REGISTRY = "0xdEd45520Ea0f3740d6e5f76363d245342d290287";
+const DEMO_MODE_ALLOWED = process.env.ALLOW_DEMO_MODE === "true";
 
 app.use(express.json({ limit: "1mb" }));
 
@@ -75,7 +76,7 @@ async function runComputeJury(agentResponse: string): Promise<{ evaluation: Eval
   const model = process.env.ZG_COMPUTE_MODEL ?? "zai-org/GLM-5-FP8";
 
   if (!apiKey) {
-    if (process.env.ALLOW_DEMO_MODE === "false") {
+    if (!DEMO_MODE_ALLOWED) {
       throw new Error("ZG_COMPUTE_API_KEY is required when demo mode is disabled");
     }
     return { evaluation: evaluationSchema.parse(fallbackEvaluation), model, live: false };
@@ -183,7 +184,7 @@ async function anchorToStorage(json: string) {
   if (!rootHash) throw new Error("0G SDK returned an empty Merkle root");
   const privateKey = process.env.ZG_STORAGE_PRIVATE_KEY;
   if (!privateKey) {
-    if (process.env.ALLOW_DEMO_MODE === "false") {
+    if (!DEMO_MODE_ALLOWED) {
       throw new Error("ZG_STORAGE_PRIVATE_KEY is required when demo mode is disabled");
     }
     return { rootHash, live: false as const };
@@ -219,7 +220,7 @@ async function issueOnchainCredential(input: {
   const address = process.env.PROOFMARKET_CONTRACT_ADDRESS ?? MAINNET_REGISTRY;
   const privateKey = process.env.PROOFMARKET_ISSUER_PRIVATE_KEY;
   if (!address || !privateKey) {
-    if (process.env.ALLOW_DEMO_MODE === "false") {
+    if (!DEMO_MODE_ALLOWED) {
       throw new Error("Mainnet contract address and issuer key are required when demo mode is disabled");
     }
     return undefined;

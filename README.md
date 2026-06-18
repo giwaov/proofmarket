@@ -63,7 +63,8 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-The UI can run in labeled preview mode without paid credentials. Before production deployment set:
+The backend fails closed unless every paid production service is configured. A labeled local preview
+is available only when `ALLOW_DEMO_MODE=true` is set deliberately. Production uses:
 
 ```text
 ZG_COMPUTE_API_KEY

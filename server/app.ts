@@ -45,6 +45,14 @@ const evaluationSchema = z.object({
 
 type Evaluation = z.infer<typeof evaluationSchema>;
 
+export function normalizeBytes32(value: string, label = "bytes32") {
+  const normalized = value.trim();
+  if (!ethers.isHexString(normalized, 32)) {
+    throw new Error(`${label} is not a valid 32-byte hex value`);
+  }
+  return normalized;
+}
+
 const trialRequestSchema = z.object({
   wallet: z.string().refine(ethers.isAddress, "Invalid wallet address"),
   challengeId: z.literal("solidity-vault-01"),
@@ -200,8 +208,9 @@ async function anchorToStorage(json: string) {
   const [tree, treeErr] = await memData.merkleTree();
   if (treeErr || !tree) throw new Error(`0G Merkle tree error: ${treeErr}`);
 
-  const rootHash = tree.rootHash();
-  if (!rootHash) throw new Error("0G SDK returned an empty Merkle root");
+  const rawRootHash = tree.rootHash();
+  if (!rawRootHash) throw new Error("0G SDK returned an empty Merkle root");
+  const rootHash = normalizeBytes32(rawRootHash, "0G Storage Merkle root");
   const privateKey = process.env.ZG_STORAGE_PRIVATE_KEY;
   if (!privateKey) {
     if (!DEMO_MODE_ALLOWED) {
@@ -224,8 +233,10 @@ async function anchorToStorage(json: string) {
   if (uploadErr || !tx) throw new Error(`0G Storage upload error: ${uploadErr}`);
   const result = tx as { rootHash?: string; txHash?: string };
   return {
-    rootHash: result.rootHash ?? rootHash,
-    txHash: result.txHash,
+    rootHash: result.rootHash
+      ? normalizeBytes32(result.rootHash, "0G Storage upload root")
+      : rootHash,
+    txHash: result.txHash?.trim(),
     live: true as const
   };
 }

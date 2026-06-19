@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { benchmark, fallbackEvaluation } from "../server/challenge";
-import { buildAuthorizationMessage } from "../server/app";
+import { buildAuthorizationMessage, normalizeBytes32 } from "../server/app";
 import { ethers } from "ethers";
 
 describe("ProofMarket benchmark", () => {
@@ -65,5 +65,16 @@ describe("ProofMarket benchmark", () => {
     };
 
     expect(buildAuthorizationMessage(input)).toBe(buildAuthorizationMessage(input));
+  });
+
+  it("normalizes newline-tainted 0G Storage roots", () => {
+    const root = `0x${"ab".repeat(32)}`;
+    expect(normalizeBytes32(`${root}\r\n`, "root")).toBe(root);
+  });
+
+  it("rejects malformed storage roots", () => {
+    expect(() => normalizeBytes32("0x1234\r\n", "root")).toThrow(
+      "root is not a valid 32-byte hex value"
+    );
   });
 });

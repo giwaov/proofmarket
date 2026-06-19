@@ -19,7 +19,8 @@ function Set-VercelSecret {
         [Parameter(Mandatory = $true)][string]$Value
     )
 
-    $Value | vercel env add $Name production --sensitive --force --yes
+    $CleanValue = $Value.Trim()
+    vercel env add $Name production --value $CleanValue --sensitive --force --yes
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to configure $Name in Vercel."
     }

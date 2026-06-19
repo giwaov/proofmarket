@@ -53,6 +53,14 @@ export function normalizeBytes32(value: string, label = "bytes32") {
   return normalized;
 }
 
+export function normalizePrivateKey(value: string, label = "private key") {
+  const normalized = value.trim();
+  if (!ethers.isHexString(normalized, 32)) {
+    throw new Error(`${label} is not a valid 32-byte hex private key`);
+  }
+  return normalized;
+}
+
 const trialRequestSchema = z.object({
   wallet: z.string().refine(ethers.isAddress, "Invalid wallet address"),
   challengeId: z.literal("solidity-vault-01"),
@@ -87,7 +95,7 @@ function extractJson(value: string) {
 }
 
 async function runComputeJury(agentResponse: string): Promise<{ evaluation: Evaluation; model: string; live: boolean }> {
-  const apiKey = process.env.ZG_COMPUTE_API_KEY;
+  const apiKey = process.env.ZG_COMPUTE_API_KEY?.trim();
   const model = process.env.ZG_COMPUTE_MODEL ?? "zai-org/GLM-5-FP8";
 
   if (!apiKey) {
@@ -211,7 +219,7 @@ async function anchorToStorage(json: string) {
   const rawRootHash = tree.rootHash();
   if (!rawRootHash) throw new Error("0G SDK returned an empty Merkle root");
   const rootHash = normalizeBytes32(rawRootHash, "0G Storage Merkle root");
-  const privateKey = process.env.ZG_STORAGE_PRIVATE_KEY;
+  const privateKey = process.env.ZG_STORAGE_PRIVATE_KEY?.trim();
   if (!privateKey) {
     if (!DEMO_MODE_ALLOWED) {
       throw new Error("ZG_STORAGE_PRIVATE_KEY is required when demo mode is disabled");
@@ -226,7 +234,10 @@ async function anchorToStorage(json: string) {
   if (network.chainId !== MAINNET_CHAIN_ID) {
     throw new Error(`Refusing storage transaction on chain ${network.chainId}; expected 0G Mainnet 16661`);
   }
-  const signer = new ethers.Wallet(privateKey, provider);
+  const signer = new ethers.Wallet(
+    normalizePrivateKey(privateKey, "ZG_STORAGE_PRIVATE_KEY"),
+    provider
+  );
   const indexer = new Indexer(indexerUrl);
   const [tx, uploadErr] = await indexer.upload(memData, rpcUrl, signer);
 
@@ -249,7 +260,7 @@ async function issueOnchainCredential(input: {
   model: string;
 }) {
   const address = process.env.PROOFMARKET_CONTRACT_ADDRESS ?? MAINNET_REGISTRY;
-  const privateKey = process.env.PROOFMARKET_ISSUER_PRIVATE_KEY;
+  const privateKey = process.env.PROOFMARKET_ISSUER_PRIVATE_KEY?.trim();
   if (!address || !privateKey) {
     if (!DEMO_MODE_ALLOWED) {
       throw new Error("Mainnet contract address and issuer key are required when demo mode is disabled");
@@ -262,7 +273,10 @@ async function issueOnchainCredential(input: {
   if (network.chainId !== MAINNET_CHAIN_ID) {
     throw new Error(`Refusing credential issue on chain ${network.chainId}; expected 0G Mainnet 16661`);
   }
-  const signer = new ethers.Wallet(privateKey, provider);
+  const signer = new ethers.Wallet(
+    normalizePrivateKey(privateKey, "PROOFMARKET_ISSUER_PRIVATE_KEY"),
+    provider
+  );
   const contract = new ethers.Contract(
     address,
     [

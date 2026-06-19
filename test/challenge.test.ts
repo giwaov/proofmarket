@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { benchmark, fallbackEvaluation } from "../server/challenge";
-import { buildAuthorizationMessage, normalizeBytes32 } from "../server/app";
+import {
+  buildAuthorizationMessage,
+  normalizeBytes32,
+  normalizePrivateKey
+} from "../server/app";
 import { ethers } from "ethers";
 
 describe("ProofMarket benchmark", () => {
@@ -75,6 +79,17 @@ describe("ProofMarket benchmark", () => {
   it("rejects malformed storage roots", () => {
     expect(() => normalizeBytes32("0x1234\r\n", "root")).toThrow(
       "root is not a valid 32-byte hex value"
+    );
+  });
+
+  it("normalizes newline-tainted private keys", () => {
+    const privateKey = `0x${"66".repeat(32)}`;
+    expect(normalizePrivateKey(`${privateKey}\r\n`, "storage key")).toBe(privateKey);
+  });
+
+  it("rejects malformed private keys without exposing their value", () => {
+    expect(() => normalizePrivateKey("0x1234\r\n", "storage key")).toThrow(
+      "storage key is not a valid 32-byte hex private key"
     );
   });
 });

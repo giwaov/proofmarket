@@ -61,6 +61,30 @@ export function normalizePrivateKey(value: string, label = "private key") {
   return normalized;
 }
 
+const SAFE_TRIAL_ERRORS = new Map<string, number>([
+  ["Wallet authorization expired; sign the trial again", 400],
+  ["Wallet signature does not match trial owner", 400],
+  ["This signed trial was already submitted", 400]
+]);
+
+export function publicTrialError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  const status = SAFE_TRIAL_ERRORS.get(message);
+  return status
+    ? { status, message }
+    : {
+        status: 500,
+        message: "Trial processing failed. Please retry with a new wallet signature."
+      };
+}
+
+function logInternalError(context: string, error: unknown) {
+  console.error({
+    context,
+    errorType: error instanceof Error ? error.name : typeof error
+  });
+}
+
 const trialRequestSchema = z.object({
   wallet: z.string().refine(ethers.isAddress, "Invalid wallet address"),
   challengeId: z.literal("solidity-vault-01"),
@@ -386,8 +410,9 @@ app.get("/api/registry", async (_request, response) => {
       recentCredentials: events.slice(0, 6)
     });
   } catch (error) {
+    logInternalError("registry-read", error);
     response.status(502).json({
-      error: error instanceof Error ? error.message : "Unable to read registry"
+      error: "Unable to read the on-chain registry"
     });
   }
 });
@@ -438,8 +463,9 @@ app.get("/api/credentials/:wallet", async (request, response) => {
       }
     });
   } catch (error) {
+    logInternalError("credential-read", error);
     response.status(502).json({
-      error: error instanceof Error ? error.message : "Unable to read credential"
+      error: "Unable to read the on-chain credential"
     });
   }
 });
@@ -507,7 +533,6 @@ app.post("/api/trials/run", async (request, response) => {
       mode: computeLive && storage.live && Boolean(chainTxHash) ? "live" : "demo"
     });
   } catch (error) {
-    console.error(error);
     if (error instanceof z.ZodError) {
       response.status(400).json({
         error: "Invalid trial submission",
@@ -519,12 +544,9 @@ app.post("/api/trials/run", async (request, response) => {
       return;
     }
 
-    const message = error instanceof Error ? error.message : "Trial failed";
-    const isClientError =
-      message.includes("signature") ||
-      message.includes("authorization") ||
-      message.includes("already submitted");
-    response.status(isClientError ? 400 : 500).json({ error: message });
+    logInternalError("trial-run", error);
+    const publicError = publicTrialError(error);
+    response.status(publicError.status).json({ error: publicError.message });
   }
 });
 

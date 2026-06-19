@@ -3,7 +3,8 @@ import { benchmark, fallbackEvaluation } from "../server/challenge";
 import {
   buildAuthorizationMessage,
   normalizeBytes32,
-  normalizePrivateKey
+  normalizePrivateKey,
+  publicTrialError
 } from "../server/app";
 import { ethers } from "ethers";
 
@@ -91,5 +92,27 @@ describe("ProofMarket benchmark", () => {
     expect(() => normalizePrivateKey("0x1234\r\n", "storage key")).toThrow(
       "storage key is not a valid 32-byte hex private key"
     );
+  });
+
+  it("never exposes internal trial errors to API clients", () => {
+    const secret = `0x${"66".repeat(32)}`;
+    const result = publicTrialError(
+      new Error(`invalid BytesLike value (argument="value", value="${secret}\\r\\n")`)
+    );
+
+    expect(result.status).toBe(500);
+    expect(result.message).not.toContain(secret);
+    expect(result.message).toBe(
+      "Trial processing failed. Please retry with a new wallet signature."
+    );
+  });
+
+  it("preserves approved wallet-facing trial errors", () => {
+    expect(
+      publicTrialError(new Error("Wallet signature does not match trial owner"))
+    ).toEqual({
+      status: 400,
+      message: "Wallet signature does not match trial owner"
+    });
   });
 });
